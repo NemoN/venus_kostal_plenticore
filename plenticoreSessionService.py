@@ -4,10 +4,15 @@ import hmac
 import json
 import os
 import random
-import requests
 import string
 import sys
-# pip3 install pycryptodomex
+
+# Add bundled libraries to path (survives Venus OS updates)
+_lib_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'lib')
+if os.path.isdir(_lib_dir) and _lib_dir not in sys.path:
+    sys.path.insert(0, _lib_dir)
+
+import requests
 from Cryptodome.Cipher import AES
 
 

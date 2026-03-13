@@ -1,9 +1,16 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 # vi: set autoindent noexpandtab tabstop=4 shiftwidth=4
-import re
+import os
+import sys
 
+# Add bundled libraries to path (survives Venus OS updates)
+_lib_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'lib')
+if os.path.isdir(_lib_dir):
+    sys.path.insert(0, _lib_dir)
+
+import re
 from configparser import ConfigParser
 
 from plenticoreDataService import get_data
@@ -11,7 +18,6 @@ from loggingConfig import logger
 from plenticoreSessionService import get_session_key
 
 import requests
-from requests.auth import HTTPBasicAuth
 import json
 
 from dbus_inverter import DbusInverter
@@ -21,16 +27,12 @@ from dbus.mainloop.glib import DBusGMainLoop
 try:
     import gobject  # used by victron
     from gobject import idle_add
-except:
+except ImportError:
     from gi.repository import GObject as gobject
     from gi.repository.GObject import idle_add
 
 import dbus
 import dbus.service
-import inspect
-import pprint
-import os
-import sys
 import threading
 import time
 
