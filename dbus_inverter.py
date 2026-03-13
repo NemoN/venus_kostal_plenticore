@@ -17,14 +17,16 @@ from vedbus import VeDbusService
 class DbusInverter:
     dbusservice = []
 
-    def __init__(self, dev, connection, device_instance, serial, product_name, firmware_version, process_version):
+    def __init__(self, name, connection, device_instance, serial, product_name, firmware_version, process_version,
+                 position):
 
-        print(__file__ + " starting up, connecting as pvinverter '" + dev + "' to dbus..")
+        print(__file__ + " starting up, connecting as pvinverter '" + name + "' with vrm instance '" + str(
+            device_instance) + "' to dbus and position'" + str(position) + "' ...")
 
         # Put ourselves on to the dbus
-        dbus_name = 'com.victronenergy.pvinverter.' + dev
+        dbus_name = 'com.victronenergy.pvinverter.' + name
         print('dbus_name: ' + dbus_name)
-        self.dbusservice = VeDbusService(dbus_name)
+        self.dbusservice = VeDbusService(dbus_name, register=False)
 
         # Add objects required by ve-api
         self.dbusservice.add_path('/Mgmt/ProcessName', __file__)
@@ -37,7 +39,7 @@ class DbusInverter:
         self.dbusservice.add_path('/Serial', serial)
         self.dbusservice.add_path('/Connected', 1, writeable=True)
         self.dbusservice.add_path('/ErrorCode', '(0) No Error')
-        self.dbusservice.add_path('/Position', 0)
+        self.dbusservice.add_path('/Position', position)
 
         _kwh = lambda p, v: (str(v) + 'KWh')
         _a = lambda p, v: (str(v) + 'A')
@@ -71,6 +73,8 @@ class DbusInverter:
         self.dbusservice.add_path('/stats/last_repeated_values', 0, gettextcallback=_x, writeable=True)
         self.dbusservice.add_path('/stats/reconnect', 0, gettextcallback=_x)
         self.dbusservice.add_path('/Mgmt/intervall', 1, gettextcallback=_s, writeable=True)
+
+        self.dbusservice.register()
 
     def invalidate(self):
         self.set('/Ac/L1/Power', [])

@@ -35,8 +35,11 @@ Connect via ssh as root to your venus os. If you don't have root access jet, see
 ### Install dependencies:
 Important: You might need to reinstall these dependencies after a venus os update to get the plugin running again as the update seems to overwride everything outside the /data dir)
 
-1. install pip (python package manager): run `opkg update` and `opkg install python3-pip`
-2. install pycryptodomex `pip3 install pycryptodomex`
+1. install pip (python package manager):
+   . ```opkg update && opkg install python3-pip```
+2. install pycryptodomex (+ missing toml lib)
+   - ```opkg install python3-tomllib```
+   - ```pip3 install pycryptodomex```
 
 ### Install plugin:
 
@@ -48,13 +51,14 @@ Venus OS does not come with git, so I recommend cloning/downloading this repo to
 
 ### Configure plugin:
 
-1. configure `kostal.ini`: set kostal_name, the inverters ip, password and refresh interval
-
+1. configure `kostal.ini`: set kostal_name, the inverters ip, the vrm instance, password and refresh interval. 
     ```
     [kostal_name]
     ip = http://192.168.178.XXX
+    instance = 50
     password = XXX
     interval = 5
+    position = 0 # 0:AC input 1, 1: AC output, 2: AC input 2
     ``` 
 
 2. set File permissions for run and kill scripts:
@@ -84,6 +88,7 @@ Venus OS does not come with git, so I recommend cloning/downloading this repo to
 
 If you have multiple plenticores, you have to create a service for each one. So duplicate the service dir (`/data/venus_kostal_plenticore/service`) to e.g. `/data/venus_kostal_plenticore/service-east-roof` and `/data/venus_kostal_plenticore/service-west-roof`.
 Also duplicate the config and edit the run scripts in both service folders so that both use their own config.
+Make sure that all kostals have different instance values, otherwise only one will show up in the gui-v2.
 Lastly link both services in the /service dir as shown in step 5.
 Make sure that you configure different names for both inverters.
 

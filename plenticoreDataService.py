@@ -40,7 +40,7 @@ def get_data(baseUrl, sessionId):
     energy = response.json()[0]['processdata'][0]['value']
     currentTime = time.time()
 
-    # Unfortunately the total energy is only updated every 5 min. This is used by the Victron VRM Portal 
+    # Unfortunately the total energy is only updated every 5 min. This is used by the Victron VRM Portal
     # to calculate the energy consumption.
     # If the portal has no regular updates, the energy consumption is higher than normal.
     # To avoid it, we need a actual energy. So we need to calculate the delta by our own.
@@ -51,7 +51,7 @@ def get_data(baseUrl, sessionId):
         lastEnergy = energy
         calcEnergy = energy
         lastTime = currentTime
-    else: # Calculate the delta 
+    else: # Calculate the delta
         # The formula is E = P * t
         deltaTime = currentTime-lastTime # time since last delta calculation
         delta = data['PT'] * deltaTime / 3600 # P is given in Watt and delta time should be hour, so divide it by 3600 (60min * 60s = 1h)
