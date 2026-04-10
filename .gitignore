@@ -6,5 +6,7 @@
 /dataSources.local.xml
 # Editor-based HTTP Client requests
 /httpRequests/
+Energy.log
 
 /.idea/
+__pycache__/

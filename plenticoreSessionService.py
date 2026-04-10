@@ -4,11 +4,23 @@ import hmac
 import json
 import os
 import random
-import requests
 import string
 import sys
-# pip3 install pycryptodomex
+
+# Add bundled libraries to path (survives Venus OS updates)
+_lib_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'lib')
+if os.path.isdir(_lib_dir) and _lib_dir not in sys.path:
+    sys.path.insert(0, _lib_dir)
+
+import requests
 from Cryptodome.Cipher import AES
+
+
+REQUEST_TIMEOUT = 10
+
+# Reuse HTTP connections via session
+http_session = requests.Session()
+http_session.headers.update({'Content-type': 'application/json', 'Accept': 'application/json'})
 
 
 # Based on https://stackoverflow.com/questions/59053539/api-call-portation-from-java-to-python-kostal-plenticore-inverter
@@ -35,9 +47,9 @@ def get_session_key(passwd, base_url):
     step1 = json.dumps(step1)
 
     url = base_url + AUTH_START
-    headers = {'Content-type': 'application/json', 'Accept': 'application/json'}
-    response = requests.post(url, data=step1, headers=headers)
-    response = json.loads(response.text)
+    response = http_session.post(url, data=step1, timeout=REQUEST_TIMEOUT)
+    response.raise_for_status()
+    response = response.json()
     i = response['nonce']
     e = response['transactionId']
     o = response['rounds']
@@ -64,9 +76,9 @@ def get_session_key(passwd, base_url):
     step2 = json.dumps(step2)
 
     url = base_url + AUTH_FINISH
-    headers = {'Content-type': 'application/json', 'Accept': 'application/json'}
-    response = requests.post(url, data=step2, headers=headers)
-    response = json.loads(response.text)
+    response = http_session.post(url, data=step2, timeout=REQUEST_TIMEOUT)
+    response.raise_for_status()
+    response = response.json()
     token = response['token']
     signature = response['signature']
 
@@ -88,30 +100,59 @@ def get_session_key(passwd, base_url):
     }
     step3 = json.dumps(step3)
 
-    headers = {'Content-type': 'application/json', 'Accept': 'application/json'}
     url = base_url + AUTH_CREATE_SESSION
-    response = requests.post(url, data=step3, headers=headers)
-    response = json.loads(response.text)
+    response = http_session.post(url, data=step3, timeout=REQUEST_TIMEOUT)
+    response.raise_for_status()
+    response = response.json()
     sessionId = response['sessionId']
 
     # create a new header with the new Session-ID for all further requests
-    headers = {'Content-type': 'application/json', 'Accept': 'application/json',
-               'authorization': "Session " + sessionId}
+    http_session.headers['authorization'] = "Session " + sessionId
     url = base_url + ME
-    response = requests.get(url=url, headers=headers)
-    response = json.loads(response.text)
+    response = http_session.get(url=url, timeout=REQUEST_TIMEOUT)
+    response.raise_for_status()
+    response = response.json()
     authOK = response['authenticated']
     if not authOK:
-        print("authorization NOT OK")
-        sys.exit()
+        raise ValueError("Session authentication failed: server returned authenticated=False")
 
     url = base_url + "/info/version"
-    response = requests.get(url=url, headers=headers)
-    response = json.loads(response.text)
+    response = http_session.get(url=url, timeout=REQUEST_TIMEOUT)
+    response.raise_for_status()
+    response = response.json()
     swversion = response['sw_version']
     apiversion = response['api_version']
     hostname = response['hostname']
     name = response['name']
-    print("Connected to the inverter " + name + "/" + hostname + " with SW-Version " + swversion + " and API-Version " + apiversion)
-    return sessionId, swversion, apiversion
+
+    # Fetch inverter settings (serial, product name, max power, string count)
+    inv_settings = {'serial': hostname, 'product_name': name, 'max_power': None, 'string_cnt': 3}
+    try:
+        url = base_url + "/settings/devices:local/Properties:SerialNo,Branding:ProductName1,Inverter:MaxApparentPower,Properties:StringCnt"
+        response = http_session.get(url=url, timeout=REQUEST_TIMEOUT)
+        response.raise_for_status()
+        settings = response.json()
+        settings_map = {s['id']: s['value'] for s in settings}
+        if 'Properties:SerialNo' in settings_map:
+            inv_settings['serial'] = settings_map['Properties:SerialNo']
+        if 'Inverter:MaxApparentPower' in settings_map:
+            try:
+                inv_settings['max_power'] = int(float(settings_map['Inverter:MaxApparentPower']))
+            except (ValueError, TypeError):
+                pass
+        if 'Properties:StringCnt' in settings_map:
+            try:
+                inv_settings['string_cnt'] = int(float(settings_map['Properties:StringCnt']))
+            except (ValueError, TypeError):
+                pass
+        if 'Branding:ProductName1' in settings_map:
+            product_name = settings_map['Branding:ProductName1']
+            if inv_settings['max_power'] is not None:
+                product_name = product_name + ' ' + str(inv_settings['max_power'])
+            inv_settings['product_name'] = product_name
+    except Exception as err:
+        print("Warning: Could not fetch inverter settings: " + str(err))
+
+    print("Connected to the inverter " + name + "/" + hostname + " (S/N: " + inv_settings['serial'] + ") with SW-Version " + swversion + " and API-Version " + apiversion)
+    return sessionId, swversion, apiversion, inv_settings
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 try:
     import gobject
@@ -17,14 +17,16 @@ from vedbus import VeDbusService
 class DbusInverter:
     dbusservice = []
 
-    def __init__(self, dev, connection, device_instance, serial, product_name, firmware_version, process_version):
+    def __init__(self, name, connection, device_instance, serial, product_name, firmware_version, process_version,
+                 position, max_power=None, string_cnt=3):
 
-        print(__file__ + " starting up, connecting as pvinverter '" + dev + "' to dbus..")
+        print(__file__ + " starting up, connecting as pvinverter '" + name + "' with vrm instance '" + str(
+            device_instance) + "' to dbus and position'" + str(position) + "' ...")
 
         # Put ourselves on to the dbus
-        dbus_name = 'com.victronenergy.pvinverter.' + dev
+        dbus_name = 'com.victronenergy.pvinverter.' + name
         print('dbus_name: ' + dbus_name)
-        self.dbusservice = VeDbusService(dbus_name)
+        self.dbusservice = VeDbusService(dbus_name, register=False)
 
         # Add objects required by ve-api
         self.dbusservice.add_path('/Mgmt/ProcessName', __file__)
@@ -37,13 +39,15 @@ class DbusInverter:
         self.dbusservice.add_path('/Serial', serial)
         self.dbusservice.add_path('/Connected', 1, writeable=True)
         self.dbusservice.add_path('/ErrorCode', '(0) No Error')
-        self.dbusservice.add_path('/Position', 0)
+        self.dbusservice.add_path('/Position', position)
+        self.dbusservice.add_path('/CustomName', product_name, writeable=True)
 
         _kwh = lambda p, v: (str(v) + 'KWh')
         _a = lambda p, v: (str(v) + 'A')
         _w = lambda p, v: (str(v) + 'W')
         _v = lambda p, v: (str(v) + 'V')
         _s = lambda p, v: (str(v) + 's')
+        _hz = lambda p, v: (str(v) + 'Hz')
         _x = lambda p, v: (str(v))
 
         self.dbusservice.add_path('/Ac/Energy/Forward', None, gettextcallback=_kwh)
@@ -62,6 +66,22 @@ class DbusInverter:
         self.dbusservice.add_path('/Ac/Power', None, gettextcallback=_w)
         self.dbusservice.add_path('/Ac/Current', None, gettextcallback=_a)
         self.dbusservice.add_path('/Ac/Voltage', None, gettextcallback=_v)
+        self.dbusservice.add_path('/Ac/Frequency', None, gettextcallback=_hz)
+        if max_power is not None:
+            self.dbusservice.add_path('/Ac/MaxPower', max_power, gettextcallback=_w)
+
+        self.dbusservice.add_path('/Dc/0/Voltage', None, gettextcallback=_v)
+        self.dbusservice.add_path('/Dc/0/Current', None, gettextcallback=_a)
+        self.dbusservice.add_path('/Dc/0/Power', None, gettextcallback=_w)
+        self.dbusservice.add_path('/Dc/1/Voltage', None, gettextcallback=_v)
+        self.dbusservice.add_path('/Dc/1/Current', None, gettextcallback=_a)
+        self.dbusservice.add_path('/Dc/1/Power', None, gettextcallback=_w)
+        if string_cnt >= 3:
+            self.dbusservice.add_path('/Dc/2/Voltage', None, gettextcallback=_v)
+            self.dbusservice.add_path('/Dc/2/Current', None, gettextcallback=_a)
+            self.dbusservice.add_path('/Dc/2/Power', None, gettextcallback=_w)
+
+        self.dbusservice.add_path('/StatusCode', None, gettextcallback=_x)
 
         self.dbusservice.add_path('/stats/connection_ok', 0, gettextcallback=_x, writeable=True)
         self.dbusservice.add_path('/stats/connection_error', 0, gettextcallback=_x, writeable=True)
@@ -71,6 +91,8 @@ class DbusInverter:
         self.dbusservice.add_path('/stats/last_repeated_values', 0, gettextcallback=_x, writeable=True)
         self.dbusservice.add_path('/stats/reconnect', 0, gettextcallback=_x)
         self.dbusservice.add_path('/Mgmt/intervall', 1, gettextcallback=_s, writeable=True)
+
+        self.dbusservice.register()
 
     def invalidate(self):
         self.set('/Ac/L1/Power', [])
