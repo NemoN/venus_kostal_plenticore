@@ -1,7 +1,7 @@
 import logging
 from logging.handlers import RotatingFileHandler
 
-LOG_FILE = "/data/venus_kostal_plenticore/Energy.log"
+LOG_FILE = "/data/venus_kostal_plenticore/kostal.log"
 LOG_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 LOG_BACKUP_COUNT = 3
 

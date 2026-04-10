@@ -1,9 +1,21 @@
 # Venus Kostal Plenticore plugin
 
-This plugin obtains the current production from an kostal plenticore (or similar) inverter and displays it in venus os.
-The data is used to calculated the internal consumption, etc. and is also included in the VRM graphs.
+This plugin integrates Kostal Plenticore (or similar) inverters into Venus OS. It reads AC production data, DC tracker data (per PV string), grid frequency, inverter status, energy statistics and device information via the inverter's REST API and publishes them on D-Bus for use in the Venus OS GUI and VRM Portal.
 
-## Kompatibility
+## Features
+
+- **AC data**: Per-phase voltage, current, power and energy (L1/L2/L3) + totals
+- **AC frequency**: Grid frequency
+- **DC tracker data**: Voltage, current and power per PV string (PV1, PV2, PV3)
+- **Inverter status**: Mapped to Venus OS status codes (Startup/Running/Standby/Error)
+- **Energy statistics**: Total yield with interpolation (5-min update workaround), daily yield
+- **Device info**: Serial number, product name, firmware version, max power — automatically fetched from inverter settings API
+- **Custom name**: Editable via Venus OS Remote Console
+- **Auto-detection**: Number of PV strings is read from inverter settings, DC/2 paths only registered if 3 strings present
+- **Robust**: DC tracker fetch is non-fatal — if it fails, AC data continues to work
+- **Reconnect**: Exponential backoff on connection loss
+
+## Compatibility
 
 This plugin should work with all PIKO IQ and PLENTICORE PLUS inverters. Go to `http://your-inverters-ip/api/v1/info/version`, if you get a response like this:   
 ```
@@ -36,10 +48,13 @@ Connect via ssh as root to your venus os. If you don't have root access jet, see
 Important: You might need to reinstall these dependencies after a venus os update to get the plugin running again as the update seems to overwride everything outside the /data dir)
 
 1. install pip (python package manager):
-   . ```opkg update && opkg install python3-pip```
-2. install pycryptodomex (+ missing toml lib)
-   - ```opkg install python3-tomllib```
-   - ```pip3 install pycryptodomex```
+   ```
+   opkg update && opkg install python3-pip
+   ```
+2. install pycryptodomex:
+   ```
+   pip3 install pycryptodomex
+   ```
 
 ### Install plugin:
 
@@ -52,14 +67,26 @@ Venus OS does not come with git, so I recommend cloning/downloading this repo to
 ### Configure plugin:
 
 1. configure `kostal.ini`: set kostal_name, the inverters ip, the vrm instance, password and refresh interval. 
-    ```
+    ```ini
     [kostal_name]
     ip = http://192.168.178.XXX
     instance = 50
     password = XXX
     interval = 5
-    position = 0 # 0:AC input 1, 1: AC output, 2: AC input 2
+    position = 0
+    loglevel = INFO
     ``` 
+
+   | Option | Required | Default | Description |
+   |--------|----------|---------|-------------|
+   | `ip` | yes | — | Inverter URL, format `http://x.x.x.x` |
+   | `password` | yes | — | Inverter user password |
+   | `interval` | yes | — | Poll interval in seconds |
+   | `instance` | no | `50` | VRM device instance number |
+   | `position` | no | `0` | AC position: 0=AC input 1, 1=AC output, 2=AC input 2 |
+   | `loglevel` | no | `INFO` | Log level: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+
+   The section name (e.g. `[kostal_name]`) is used as the D-Bus service name suffix.
 
 2. set File permissions for run and kill scripts:
    - `chmod 755 /data/venus_kostal_plenticore/service/run`
@@ -84,13 +111,53 @@ Venus OS does not come with git, so I recommend cloning/downloading this repo to
    The rc.local file is executed when venus os boots and will create the link in the service directory for you
 
 
-### What to do if you have multiple plenticores? 
+### Multiple Plenticores
 
-If you have multiple plenticores, you have to create a service for each one. So duplicate the service dir (`/data/venus_kostal_plenticore/service`) to e.g. `/data/venus_kostal_plenticore/service-east-roof` and `/data/venus_kostal_plenticore/service-west-roof`.
-Also duplicate the config and edit the run scripts in both service folders so that both use their own config.
-Make sure that all kostals have different instance values, otherwise only one will show up in the gui-v2.
-Lastly link both services in the /service dir as shown in step 5.
-Make sure that you configure different names for both inverters.
+Simply add one section per inverter to `kostal.ini`. Each section gets its own D-Bus service and polling thread automatically — no need to duplicate service directories or run scripts.
+
+```ini
+[east-roof]
+ip = http://192.168.178.10
+instance = 50
+password = XXX
+interval = 5
+position = 0
+
+[west-roof]
+ip = http://192.168.178.11
+instance = 51
+password = XXX
+interval = 5
+position = 0
+```
+
+**Important**:
+- Each inverter must have a **unique IP address** — the Kostal API only allows one active session per inverter, so two sections with the same IP will not work.
+- Each inverter must have a **unique instance number** and a **unique section name**, otherwise only one will show up in the GUI.
+
+
+## D-Bus paths
+
+The plugin registers as `com.victronenergy.pvinverter.<name>` and exposes:
+
+| Path | Description |
+|------|-------------|
+| `/Ac/Power` | Total AC power (W) |
+| `/Ac/Current` | Total AC current (A) |
+| `/Ac/Voltage` | AC voltage L1 (V) |
+| `/Ac/Frequency` | Grid frequency (Hz) |
+| `/Ac/Energy/Forward` | Total yield (kWh, interpolated) |
+| `/Ac/MaxPower` | Max apparent power from inverter settings (W) |
+| `/Ac/L1/Voltage`, `Current`, `Power`, `Energy/Forward` | Phase L1 |
+| `/Ac/L2/...`, `/Ac/L3/...` | Phase L2, L3 |
+| `/Dc/0/Voltage`, `Current`, `Power` | DC tracker 1 (PV1) |
+| `/Dc/1/Voltage`, `Current`, `Power` | DC tracker 2 (PV2) |
+| `/Dc/2/Voltage`, `Current`, `Power` | DC tracker 3 (PV3, only if 3 strings) |
+| `/StatusCode` | Inverter status (Venus OS codes) |
+| `/ProductName` | Auto-detected from inverter |
+| `/Serial` | Serial number from inverter settings |
+| `/CustomName` | Editable name (writable) |
+| `/FirmwareVersion` | Inverter firmware version |
 
 
 

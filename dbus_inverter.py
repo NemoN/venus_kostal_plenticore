@@ -6,12 +6,32 @@ try:
 except:
     from gi.repository import GObject as gobject
     from gi.repository.GObject import idle_add
+import json
 import os
 import sys
 
 sys.path.insert(1, os.path.join(os.path.dirname(__file__), '/opt/victronenergy/dbus-systemcalc-py/ext/velib_python'))
 
 from vedbus import VeDbusService
+from loggingConfig import logger
+
+SETTINGS_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'settings.json')
+
+
+def _load_settings():
+    try:
+        with open(SETTINGS_FILE, 'r') as f:
+            return json.load(f)
+    except (IOError, ValueError):
+        return {}
+
+
+def _save_settings(settings):
+    try:
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(settings, f)
+    except IOError as err:
+        logger.warning('Could not save settings: ' + str(err))
 
 
 class DbusInverter:
@@ -20,12 +40,12 @@ class DbusInverter:
     def __init__(self, name, connection, device_instance, serial, product_name, firmware_version, process_version,
                  position, max_power=None, string_cnt=3):
 
-        print(__file__ + " starting up, connecting as pvinverter '" + name + "' with vrm instance '" + str(
-            device_instance) + "' to dbus and position'" + str(position) + "' ...")
+        logger.info("Starting up, connecting as pvinverter '" + name + "' with vrm instance '" + str(
+            device_instance) + "' to dbus and position '" + str(position) + "'")
 
         # Put ourselves on to the dbus
         dbus_name = 'com.victronenergy.pvinverter.' + name
-        print('dbus_name: ' + dbus_name)
+        logger.info('dbus_name: ' + dbus_name)
         self.dbusservice = VeDbusService(dbus_name, register=False)
 
         # Add objects required by ve-api
@@ -40,7 +60,13 @@ class DbusInverter:
         self.dbusservice.add_path('/Connected', 1, writeable=True)
         self.dbusservice.add_path('/ErrorCode', '(0) No Error')
         self.dbusservice.add_path('/Position', position)
-        self.dbusservice.add_path('/CustomName', product_name, writeable=True)
+
+        # Load persisted CustomName or use product_name as default
+        settings = _load_settings()
+        custom_name = settings.get('custom_name_' + name, product_name)
+        self._service_name = name
+        self.dbusservice.add_path('/CustomName', custom_name, writeable=True,
+                                  onchangecallback=self._on_custom_name_changed)
 
         _kwh = lambda p, v: (str(v) + 'KWh')
         _a = lambda p, v: (str(v) + 'A')
@@ -93,6 +119,13 @@ class DbusInverter:
         self.dbusservice.add_path('/Mgmt/intervall', 1, gettextcallback=_s, writeable=True)
 
         self.dbusservice.register()
+
+    def _on_custom_name_changed(self, path, value):
+        settings = _load_settings()
+        settings['custom_name_' + self._service_name] = value
+        _save_settings(settings)
+        logger.info('CustomName changed to: ' + str(value))
+        return True
 
     def invalidate(self):
         self.set('/Ac/L1/Power', [])

@@ -14,13 +14,10 @@ if os.path.isdir(_lib_dir) and _lib_dir not in sys.path:
 
 import requests
 from Cryptodome.Cipher import AES
+from loggingConfig import logger
 
 
 REQUEST_TIMEOUT = 10
-
-# Reuse HTTP connections via session
-http_session = requests.Session()
-http_session.headers.update({'Content-type': 'application/json', 'Accept': 'application/json'})
 
 
 # Based on https://stackoverflow.com/questions/59053539/api-call-portation-from-java-to-python-kostal-plenticore-inverter
@@ -32,6 +29,9 @@ def get_session_key(passwd, base_url):
     AUTH_FINISH = "/auth/finish"
     AUTH_CREATE_SESSION = "/auth/create_session"
     ME = "/auth/me"
+
+    http_session = requests.Session()
+    http_session.headers.update({'Content-type': 'application/json', 'Accept': 'application/json'})
 
     def randomString(stringLength):
         letters = string.ascii_letters
@@ -151,8 +151,8 @@ def get_session_key(passwd, base_url):
                 product_name = product_name + ' ' + str(inv_settings['max_power'])
             inv_settings['product_name'] = product_name
     except Exception as err:
-        print("Warning: Could not fetch inverter settings: " + str(err))
+        logger.warning("Could not fetch inverter settings: " + str(err))
 
-    print("Connected to the inverter " + name + "/" + hostname + " (S/N: " + inv_settings['serial'] + ") with SW-Version " + swversion + " and API-Version " + apiversion)
+    logger.info("Connected to the inverter " + name + "/" + hostname + " (S/N: " + inv_settings['serial'] + ") with SW-Version " + swversion + " and API-Version " + apiversion)
     return sessionId, swversion, apiversion, inv_settings
 
